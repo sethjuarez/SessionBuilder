@@ -2,12 +2,14 @@ properties {
 	$majorVersion = "1.0"
 	$majorWithReleaseVersion = "1.0.0"
 	$version = GetVersion $majorWithReleaseVersion
+	$name = "SessionBuilder"
 	$treatWarningsAsErrors = $true
 	$workingName = if ($workingName) {$workingName} else {"Working"}
 	$baseDir  = resolve-path ..
 	$buildDir = "$baseDir\Build"
 	$sourceDir = "$baseDir\Src"
 	$toolsDir = "$baseDir\Tools"
+	$releaseDir = "$baseDir\Release"
 	$workingDir = "$baseDir\$workingName"
 	$workingSourceDir = "$workingDir\Src"
 	$builds = @(
@@ -17,7 +19,7 @@ properties {
 
 framework '4.6x86'
 
-task default -depends Nuget
+task default -depends ILMerge
 
 task Clean {
 	Write-Host "Setting location to $baseDir"
@@ -28,6 +30,13 @@ task Clean {
 		Write-Host "Deleting existing working directory $workingDir"
 	
 		Execute-Command -command { del $workingDir -Recurse -Force }
+	}
+	
+	if (Test-Path -path $releaseDir)
+	{
+		Write-Host "Deleting existing working directory $workingDir"
+	
+		Execute-Command -command { del $releaseDir -Recurse -Force }
 	}
 	
 	Write-Host "Creating working directory $workingDir"
@@ -42,21 +51,24 @@ task Build -depends Clean {
 	Write-Host
 	Update-AssemblyInfoFiles $workingSourceDir ($majorVersion + '.0.0') $version
 	
-	Update-Project $workingSourceDir\numl\project.json
+	# build
+	Write-Host
+	Write-Host "Restoring $workingSourceDir\$name.sln" -ForegroundColor Green
+	[Environment]::SetEnvironmentVariable("EnableNuGetPackageRestore", "true", "Process")
+	exec { .\Tools\NuGet\NuGet.exe update -self }
+	exec { .\Tools\NuGet\NuGet.exe restore "$workingSourceDir\$name.sln" -verbosity detailed -configfile $workingSourceDir\nuget.config | Out-Default } "Error restoring $name"
 	
-	foreach ($build in $builds)
-	{
-		$name = $build.Name
-		if ($name -ne $null)
-		{
-			Write-Host -ForegroundColor Green "Building " $name
-			& $build.BuildFunction $build
-		}
-	}
+	Write-Host
+	Write-Host "Building $workingSourceDir\$name.sln" -ForegroundColor Green
+	exec { msbuild "/t:Clean;Rebuild" /p:Configuration=Release /p:OutputPath=$releaseDir\Build "/p:TreatWarningsAsErrors=$treatWarningsAsErrors" "/p:VisualStudioVersion=14.0" "$workingSourceDir\$name.sln" | Out-Default } "Error building $name"
+
+	
 }
 
 task ILMerge -depends Build {
-	
+
+	exec { .\Tools\ILMerge\ILMerge.exe /wildcards /v4 $releaseDir\Build\$name.exe $releaseDir\Build\*.dll /out:$releaseDir\$name.exe | Out-Default } "ILMerge Error for $name"
+	Write-Host "ILMerge to $releaseDir\$name.exe complete!" -ForegroundColor Green
 }
 
 function Update-AssemblyInfoFiles ([string] $workingSourceDir, [string] $assemblyVersionNumber, [string] $fileVersionNumber)
@@ -77,43 +89,6 @@ function Update-AssemblyInfoFiles ([string] $workingSourceDir, [string] $assembl
 			% {$_ -replace $fileVersionPattern, $fileVersion }
 			
 		} | Set-Content $filename
-	}
-}
-
-function Update-Project($projectPath) 
-{
-	$json = (Get-Content $projectPath) -join "`n" | ConvertFrom-Json
-	$options = @{"warningsAsErrors" = $true; "define" = ((GetConstants "dotnet") -split ";") }
-	Add-Member -InputObject $json -MemberType NoteProperty -Name "compilationOptions" -Value $options -Force
-	ConvertTo-Json $json -Depth 10 | Set-Content $projectPath
-}
-
-function GetConstants($constants)
-{
-	return "CODE_ANALYSIS;TRACE;$constants"
-}
-
-function MSBuildBuild($build)
-{
-	$name = $build.Name
-	$finalDir = $build.FinalDir
-	
-	Write-Host
-	Write-Host "Restoring $workingSourceDir\$name.sln" -ForegroundColor Green
-	[Environment]::SetEnvironmentVariable("EnableNuGetPackageRestore", "true", "Process")
-	exec { .\Tools\NuGet\NuGet.exe update -self }
-	exec { .\Tools\NuGet\NuGet.exe restore "$workingSourceDir\$name.sln" -verbosity detailed -configfile $workingSourceDir\nuget.config | Out-Default } "Error restoring $name"
-	
-	$constants = GetConstants $build.Constants
-	
-	Write-Host
-	Write-Host "Building $workingSourceDir\$name.sln" -ForegroundColor Green
-	if ($name -match 'Tests') { 
-		Write-Host "NO DOCS $name" -ForegroundColor Red
-		#exec { msbuild "/t:Clean;Rebuild" /p:Configuration=Release /p:OutputPath=bin\Release\$finalDir\ "/p:TreatWarningsAsErrors=$treatWarningsAsErrors" "/p:VisualStudioVersion=14.0" /p:DefineConstants=`"$constants`" "$workingSourceDir\$name.sln" | Out-Default } "Error building $name"
-	} else {
-		Write-Host "YES DOCS $name" -ForegroundColor Red
-		#exec { msbuild "/t:Clean;Rebuild" /p:Configuration=Release /p:OutputPath=bin\Release\$finalDir\ "/p:TreatWarningsAsErrors=$treatWarningsAsErrors" "/p:VisualStudioVersion=14.0" "/p:documentationFile=bin\Release\$finalDir\$name.xml" /p:DefineConstants=`"$constants`" "$workingSourceDir\$name.sln" | Out-Default } "Error building $name"	
 	}
 }
 

@@ -1,6 +1,7 @@
 [Bb]in/
 [Oo]bj/
-[Ww]orking*/
+[Ww]orking/
+[Rr]elease/
 Build/runbuild.txt
 TestResults/
 packages/
