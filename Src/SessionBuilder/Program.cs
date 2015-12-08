@@ -15,6 +15,7 @@ namespace SessionBuilder
         private static string _path;
         private static string _output;
         private static readonly List<Record> _records = new List<Record>();
+        private static bool _make = false;
         static void Main(string[] args)
         {
             bool help = false;
@@ -25,11 +26,16 @@ namespace SessionBuilder
             p.Setup<string>('p', "path")
              .Callback(pth => _path = pth)
              .WithDescription(string.Format("{0}Search path:{0} Raw mode,{0}  .../1_Monday/NameOfInterview/<filename>.md{0} Final mode,{0}  .../1_Monday/NameOfInterview.mp4{0}  (looks for corresponding NameofInterview.md)", brk))
-             .SetDefault(GetCurrentPath());
+             .Required();
 
             p.Setup<bool>('r', "raw")
              .Callback(r => raw = r)
              .WithDescription(brk + "Final encoded files or raw? (default is final)")
+             .SetDefault(false);
+
+            p.Setup<bool>('m', "make")
+             .Callback(r => _make = r)
+             .WithDescription(brk + "Make default md files (if they don't exist)")
              .SetDefault(false);
 
             p.Setup<string>('o', "output")
@@ -53,7 +59,11 @@ namespace SessionBuilder
             if (!help)
             {
                 if (!Directory.Exists(_path))
-                    _path = GetCurrentPath();
+                {
+                    WriteLine("Valid path is required...", ConsoleColor.Red);
+                    p.HelpOption.ShowHelp(p.Options);
+                    return;
+                }
 
 
                 if (_output == string.Empty)
@@ -108,9 +118,18 @@ namespace SessionBuilder
                     WriteLine(pad + Path.GetFileName(item), ConsoleColor.Cyan);
                     // no description, no point
                     if (!File.Exists(md))
+                    {
+                        if (_make)
+                        {
+                            WriteLine(string.Format("{0}Writing out default markdown to {1}", pad, Path.GetFileName(md)), ConsoleColor.Green);
+                            File.WriteAllText(md, "# Title Here\n\nDescription here.");
+                        }
                         continue;
+                    }
                     parent = path[path.Length - 1];
                     r.FileName = Path.GetFileName(item);
+                    r.FilePath = item;
+                    r.RelativePath = item.Replace(_path + "\\", "");
                 }
 
                 var data = parent.Split('_');
@@ -224,7 +243,7 @@ namespace SessionBuilder
 
         public string FilePath { get; set; }
 
-        public string ShortFilePath { get; set; }
+        public string RelativePath { get; set; }
 
         public override string ToString()
         {

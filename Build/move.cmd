@@ -1,0 +1,1 @@
+cp ..\Release\SessionBuilder.exe c:\util
