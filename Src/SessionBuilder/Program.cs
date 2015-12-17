@@ -122,7 +122,7 @@ namespace SessionBuilder
                         if (_make)
                         {
                             WriteLine(string.Format("{0}Writing out default markdown to {1}", pad, Path.GetFileName(md)), ConsoleColor.Green);
-                            File.WriteAllText(md, "# Title Here\n\nDescription here.");
+                            File.WriteAllText(md, "{ tag1, tag2, tag3 }\n# Title Here\n\nDescription here.");
                         }
                         continue;
                     }
@@ -140,7 +140,10 @@ namespace SessionBuilder
 
                 _records.Add(r);
 
-                WriteLine(string.Format("{0}Found: \"{1}\"", pad + (raw ? "" : "\t"), r.Title), ConsoleColor.Green);
+                if(r.Title == "Title Here")
+                    WriteLine(string.Format("{0}Found: \"{1}\"", pad + (raw ? "" : "\t"), r.Title), ConsoleColor.Red);
+                else
+                    WriteLine(string.Format("{0}Found: \"{1}\"", pad + (raw ? "" : "\t"), r.Title), ConsoleColor.Green);
             }
         }
 
@@ -233,6 +236,8 @@ namespace SessionBuilder
 
         public string Description { get; set; }
 
+        public string Tags { get; set; }
+
         public string MarkdownDescription { get; set; }
 
         public string Day { get; set; }
@@ -260,7 +265,15 @@ namespace SessionBuilder
             {
                 using (var f = File.OpenText(file))
                 {
-                    Title = f.ReadLine().Replace("#", "").Trim();
+                    var text = f.ReadLine();
+                    if (text.StartsWith("{"))
+                    {
+                        Tags = text.Replace("{", "").Replace("}", "").Trim();
+                        text = f.ReadLine();
+                    }
+
+                    Title = text.Replace("#", "").Trim();
+
                     MarkdownDescription = f.ReadToEnd();
                     Description = new Markdown()
                                     .Transform(MarkdownDescription);
